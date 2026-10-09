@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+fixtures/videos/*
+!fixtures/videos/.gitkeep
+*_edited.mp4
+.DS_Store

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(.venv/bin/pytest:*)",
+      "Bash(.venv/bin/python -m pytest:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(ffprobe:*)",
+      "Bash(docker compose:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)"
+    ],
+    "ask": [
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}

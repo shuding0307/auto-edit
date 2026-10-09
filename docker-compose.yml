@@ -1,0 +1,40 @@
+# Phase 0: 인프라만. api / worker / web 서비스는 Phase 3에서 추가한다.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cut}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cut}
+      POSTGRES_DB: ${POSTGRES_DB:-cut}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cut}"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  # S3 호환 저장소. MinIO 공식 이미지는 더 이상 배포되지 않아 SeaweedFS로 대체.
+  # 키는 infra/seaweedfs/s3.json (로컬 개발 전용 값).
+  s3:
+    image: chrislusf/seaweedfs:3.97
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "8333:8333"
+    volumes:
+      - s3data:/data
+      - ./infra/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+
+volumes:
+  pgdata:
+  s3data:

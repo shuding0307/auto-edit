@@ -1,0 +1,23 @@
+[project]
+name = "ai-cut-editor"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["worker/tests", "apps/api/tests"]
+pythonpath = [".", "apps/api"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["apps/web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "worker"]
+
+[tool.mypy]
+files = ["worker", "apps/api/app", "scripts"]
+strict = true
