@@ -17,6 +17,10 @@ class Settings:
     )
     redis_url: str = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     s3_endpoint: str = os.environ.get("S3_ENDPOINT", "http://localhost:8333")
+    s3_public_endpoint: str = os.environ.get(
+        "S3_PUBLIC_ENDPOINT", os.environ.get("S3_ENDPOINT", "http://localhost:8333")
+    )
+    """브라우저가 접근하는 주소 (presigned URL용). 운영에선 https://s3.example.com"""
     s3_access_key: str = os.environ.get("S3_ACCESS_KEY", "devaccess")
     s3_secret_key: str = os.environ.get("S3_SECRET_KEY", "devsecret123")
     s3_bucket: str = os.environ.get("S3_BUCKET", "cut-editor")

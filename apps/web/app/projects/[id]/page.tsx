@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Review from "@/components/Review";
 import { api, type Project } from "@/lib/api";
@@ -10,6 +10,7 @@ const BUSY = new Set(["created", "uploaded", "analyzing", "rendering"]);
 
 export default function ProjectPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +35,16 @@ export default function ProjectPage() {
     }
   }
 
+  async function remove() {
+    if (!confirm("이 프로젝트와 원본·결과 파일을 모두 삭제할까요? 되돌릴 수 없습니다.")) return;
+    try {
+      await api.deleteProject(id);
+      router.push("/");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function render() {
     try {
       setProject(await api.render(id));
@@ -49,6 +60,11 @@ export default function ProjectPage() {
           ← 프로젝트
         </Link>
         <h1 className="truncate text-lg font-semibold">{project?.title ?? "…"}</h1>
+        {project && project.status !== "analyzing" && project.status !== "rendering" && (
+          <button onClick={remove} className="ml-auto text-sm text-neutral-500 hover:text-red-600">
+            삭제
+          </button>
+        )}
       </header>
 
       {error && <p className="mb-3 rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}

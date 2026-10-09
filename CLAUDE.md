@@ -9,6 +9,7 @@
 - make api      # FastAPI :8000
 - make worker   # RQ 워커 (분석·렌더)
 - make web      # Next.js :3000 → http://localhost:3000
+- make maintenance  # 멈춘 job 복구 + 7일 지난 프로젝트 삭제 (운영은 1시간마다 자동)
 
 ## 명령어
 - make setup    # .venv 생성 + Python/Node 의존성 설치 (최초 1회)
@@ -18,10 +19,13 @@
 - python scripts/cut.py input.mp4 [--stt | --transcript words.json] [--provider gemini|claude] [--dry-run]
 - python scripts/transcribe.py fixtures/videos/*.MOV   # Gemini STT → fixtures/transcripts/
 - tools/label.html  브라우저로 열어 정답 컷 라벨링 → fixtures/expected/<이름>.json
+- 배포: docs/deploy.md (docker-compose.prod.yml + Caddy HTTPS) · CapCut 검증: docs/capcut-check.md
 
 ## 구조
 - worker/pipeline/  순수 함수: silence(파서), merge, timemap, probe, transcript, llm_cuts,
-                    candidates(무음+LLM → 후보·자동승인), evaluate(정답 비교)
+                    candidates(무음+LLM → 후보·자동승인), evaluate(정답 비교),
+                    srt(편집본 자막), report(CSV), fcpxml(실험적), peaks(파형)
+- worker/maintenance.py  프로젝트 삭제·만료 정리·멈춘 job 복구
 - worker/analyze.py 분석 조립 (CLI·e2e·워커 공용)
 - worker/jobs.py    RQ job: analyze_job(프록시·파형·STT·후보 저장), render_job(렌더·내보내기)
 - apps/api/app      main.py(라우트) models.py(SQLAlchemy) storage.py(S3) queue.py(RQ) / migrations(Alembic)
@@ -45,6 +49,10 @@
 - 영상 길이는 최대 10분·500MB를 가정한다 (긴 영상 분할 설계는 범위 밖).
 
 ## 함정
+- 운영(리눅스)에는 VideoToolbox가 없어 libx264 CPU 렌더: 59초 4K가 약 3.5분, 결과 396MB.
+  맥에서는 70초. 운영 렌더 속도·용량 조정은 아직 미정 (해상도·preset·crf).
+- 맥의 80번은 내장 Apache가 사용. 운영 구성을 로컬에서 시험할 땐 HTTP_PORT/HTTPS_PORT로 바꾼다.
+- presigned URL은 서명에 호스트가 들어가므로 S3_PUBLIC_ENDPOINT(브라우저 주소)로 만든다.
 - 호스트 5432는 Homebrew Postgres, 5433은 다른 프로젝트 컨테이너가 사용 → 이 프로젝트 DB는 5434.
 - 워커는 macOS에서 SimpleWorker(fork 없음)로 실행. 코드를 바꾸면 워커를 재시작해야 반영된다.
 - 테스트는 실제 Postgres(cut_test DB)·S3(cut-editor-test 버킷)를 쓴다. make dev 없으면 통합 테스트 skip.

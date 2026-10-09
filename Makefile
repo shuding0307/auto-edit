@@ -2,7 +2,7 @@ VENV := .venv
 PY := $(VENV)/bin/python
 WEB := apps/web
 
-.PHONY: setup dev down migrate api worker web test test-py test-web lint e2e gen-types
+.PHONY: setup dev down migrate api worker web maintenance test test-py test-web lint e2e gen-types
 
 setup:
 	python3 -m venv $(VENV)
@@ -28,6 +28,9 @@ worker:
 
 web:
 	cd $(WEB) && npm run dev
+
+maintenance:
+	$(PY) scripts/maintenance.py
 
 test: test-py test-web
 

@@ -6,6 +6,14 @@ import { acceptedCuts, editedDuration, isWordCut, skipTarget } from "@/lib/cuts"
 import { formatMs } from "@/lib/time";
 import Timeline, { type Peaks } from "./Timeline";
 
+const EXPORT_LABEL: Record<string, string> = {
+  mp4: "편집된 영상 (MP4)",
+  srt: "자막 (SRT, 편집본 기준)",
+  csv: "컷 리포트 (CSV)",
+  json: "컷 목록 (JSON)",
+};
+const EXPORT_ORDER = ["mp4", "srt", "csv", "json"];
+
 const KIND_LABEL: Record<string, string> = {
   silence: "무음",
   repetition: "반복",
@@ -43,6 +51,12 @@ export default function Review({ project, onRender }: Props) {
   }, [project.id, project.peaks_url, project.status]);
 
   const cuts = useMemo(() => acceptedCuts(decisions), [decisions]);
+  // 렌더할 때마다 쌓이므로 형식별 최신 파일만 (목록은 최신순)
+  const latestExports = useMemo(() => {
+    const seen = new Map<string, ExportFile>();
+    for (const e of exportsList) if (!seen.has(e.format)) seen.set(e.format, e);
+    return [...seen.values()].sort((a, b) => EXPORT_ORDER.indexOf(a.format) - EXPORT_ORDER.indexOf(b.format));
+  }, [exportsList]);
   const counts = useMemo(() => {
     const c = { accepted: 0, suggested: 0, rejected: 0 };
     for (const d of decisions) c[d.status as keyof typeof c]++;
@@ -350,13 +364,17 @@ export default function Review({ project, onRender }: Props) {
               검토 필요 {counts.suggested}개는 렌더에 반영되지 않습니다
             </p>
           )}
-          {exportsList.length > 0 && (
+          {latestExports.length > 0 && (
             <div className="mt-3 space-y-1 text-sm">
-              <p className="font-medium">내보낸 파일</p>
-              {exportsList.map((e) => (
+              <p className="font-medium">
+                내보낸 파일{" "}
+                <span className="font-normal text-neutral-500">
+                  {new Date(latestExports[0].created_at).toLocaleString("ko-KR")}
+                </span>
+              </p>
+              {latestExports.map((e) => (
                 <a key={e.url} href={e.url} className="block text-blue-700 underline">
-                  {e.format === "mp4" ? "편집된 영상 (MP4)" : "컷 목록 (JSON)"} ·{" "}
-                  {new Date(e.created_at).toLocaleString("ko-KR")}
+                  {EXPORT_LABEL[e.format] ?? e.format}
                 </a>
               ))}
             </div>

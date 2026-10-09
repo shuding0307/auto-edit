@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from fractions import Fraction
+from typing import Any
 
 from worker.pipeline.silence import seconds_to_ms
 
@@ -14,6 +15,9 @@ class MediaInfo:
     duration_ms: int
     fps: Fraction
     has_audio: bool
+    width: int = 0
+    """회전 적용 후 화면에 보이는 크기 (iPhone 세로 영상은 3840x2160 + rotation 90)."""
+    height: int = 0
 
 
 def _rate(text: str | None) -> Fraction | None:
@@ -48,4 +52,20 @@ def parse_ffprobe(raw: str) -> MediaInfo:
     duration = data.get("format", {}).get("duration") or video.get("duration")
     if duration is None:
         raise ValueError("길이를 알 수 없습니다")
-    return MediaInfo(duration_ms=seconds_to_ms(duration), fps=fps, has_audio=has_audio)
+    width, height = int(video.get("width") or 0), int(video.get("height") or 0)
+    if _rotation(video) % 180 == 90:
+        width, height = height, width
+    return MediaInfo(
+        duration_ms=seconds_to_ms(duration),
+        fps=fps,
+        has_audio=has_audio,
+        width=width,
+        height=height,
+    )
+
+
+def _rotation(video: dict[str, Any]) -> int:
+    for sd in video.get("side_data_list") or []:
+        if "rotation" in sd:
+            return int(round(float(sd["rotation"])))
+    return int((video.get("tags") or {}).get("rotate", 0))

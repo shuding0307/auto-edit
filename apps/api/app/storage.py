@@ -14,17 +14,28 @@ from botocore.exceptions import ClientError
 from app.settings import settings
 
 
-@cache
-def client() -> Any:
+def _make(endpoint: str) -> Any:
     # SeaweedFS는 SigV4 + path-style 이어야 presigned PUT이 통과한다 (CLAUDE.md 함정)
     return boto3.client(
         "s3",
-        endpoint_url=settings.s3_endpoint,
+        endpoint_url=endpoint,
         aws_access_key_id=settings.s3_access_key,
         aws_secret_access_key=settings.s3_secret_key,
         region_name="us-east-1",
         config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
     )
+
+
+@cache
+def client() -> Any:
+    """서버 내부 접근용 (업로드·다운로드·삭제)."""
+    return _make(settings.s3_endpoint)
+
+
+@cache
+def public_client() -> Any:
+    """presigned URL 서명용. 서명에 호스트가 들어가므로 브라우저가 쓰는 주소로 만들어야 한다."""
+    return _make(settings.s3_public_endpoint)
 
 
 # SeaweedFS + 병렬 범위 다운로드(8MB 초과 시 boto3 기본)는 ETag 검증에서 실패한다.
@@ -56,7 +67,7 @@ def ensure_bucket() -> None:
 
 def presign_put(key: str, content_type: str, expires: int = 3600) -> str:
     return str(
-        client().generate_presigned_url(
+        public_client().generate_presigned_url(
             "put_object",
             Params={"Bucket": settings.s3_bucket, "Key": key, "ContentType": content_type},
             ExpiresIn=expires,
@@ -68,7 +79,9 @@ def presign_get(key: str, expires: int = 3600, filename: str | None = None) -> s
     params: dict[str, str] = {"Bucket": settings.s3_bucket, "Key": key}
     if filename:
         params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
-    return str(client().generate_presigned_url("get_object", Params=params, ExpiresIn=expires))
+    return str(
+        public_client().generate_presigned_url("get_object", Params=params, ExpiresIn=expires)
+    )
 
 
 def head_size(key: str) -> int | None:
@@ -88,3 +101,15 @@ def upload(src: Path, key: str, content_type: str) -> None:
 
 def get_bytes(key: str) -> bytes:
     return bytes(client().get_object(Bucket=settings.s3_bucket, Key=key)["Body"].read())
+
+
+def delete_prefix(prefix: str) -> int:
+    """prefix 아래 객체 전부 삭제. 지운 개수를 돌려준다."""
+    deleted = 0
+    paginator = client().get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=settings.s3_bucket, Prefix=prefix):
+        keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
+        if keys:
+            client().delete_objects(Bucket=settings.s3_bucket, Delete={"Objects": keys})
+            deleted += len(keys)
+    return deleted

@@ -7,6 +7,7 @@ API 키: 환경변수 GEMINI_API_KEY (또는 .env).
 from __future__ import annotations
 
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from worker.pipeline.transcript import Word, words_from_offsets
 
 STT_MODEL = "gemini-3.5-transcribe"
 CUT_MODEL = "gemini-3.8-flash"
+STT_BACKOFF_S = (5, 15, 30)
+_RETRYABLE = {429, 503}
 
 
 def transcribe(
@@ -30,17 +33,24 @@ def transcribe(
         audio = Path(tmp) / "audio.flac"
         ffmpeg.extract_audio(src, audio)
         uploaded = client.files.upload(file=str(audio))
-    try:
-        response = client.models.generate_content(
-            model=STT_MODEL,
-            contents=[uploaded],
-            config=types.GenerateContentConfig(
-                audio_transcription_config=types.AudioTranscriptionConfig(
-                    language_codes=[language],
-                    word_timestamp=True,
-                )
-            ),
+    config = types.GenerateContentConfig(
+        audio_transcription_config=types.AudioTranscriptionConfig(
+            language_codes=[language],
+            word_timestamp=True,
         )
+    )
+    try:
+        # STT는 대체 모델이 없으니 과부하(503)·한도(429)면 잠시 기다렸다 다시 시도
+        for wait_s in (*STT_BACKOFF_S, None):
+            try:
+                response = client.models.generate_content(
+                    model=STT_MODEL, contents=[uploaded], config=config
+                )
+                break
+            except errors.APIError as e:
+                if e.code not in _RETRYABLE or wait_s is None:
+                    raise
+                time.sleep(wait_s)
     finally:
         if uploaded.name:
             client.files.delete(name=uploaded.name)
@@ -59,7 +69,6 @@ def words_from_response(response: Any) -> list[Word]:
 
 # 앞 모델이 과부하(503)·한도 초과(429)면 다음 모델로. 모두 무료 티어 모델.
 CUT_FALLBACKS = ("gemini-3.7-flash", "gemini-3.5-flash")
-_RETRYABLE = {429, 503}
 
 
 class GeminiCutModel:

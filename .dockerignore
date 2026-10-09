@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+.env.*
+!.env.prod.example
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+fixtures/videos
+fixtures/transcripts
+capcut_test

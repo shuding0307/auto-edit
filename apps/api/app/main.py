@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import PurePath
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ from app.schemas import (
     WordOut,
 )
 from app.settings import settings
+from worker.maintenance import delete_project as delete_project_data
 
 
 @asynccontextmanager
@@ -209,6 +210,16 @@ def render(project_id: uuid.UUID, db: DB, enqueue: Q) -> ProjectOut:
     _editable(p)
     _start_job(db, enqueue, p, "render", "rendering")
     return _out(db, p)
+
+
+@app.delete("/projects/{project_id}", status_code=204)
+def delete_project(project_id: uuid.UUID, db: DB) -> Response:
+    p = _project(db, project_id)
+    if p.status in ("analyzing", "rendering"):
+        raise HTTPException(409, "처리 중인 프로젝트는 삭제할 수 없습니다")
+    db.close()
+    delete_project_data(project_id)
+    return Response(status_code=204)
 
 
 @app.get("/projects/{project_id}/exports")

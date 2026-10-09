@@ -43,3 +43,28 @@ def test_iphone_jittery_avg_uses_nominal() -> None:
         }
     )
     assert parse_ffprobe(raw).fps == Fraction(24)
+
+
+def test_rotated_iphone_reports_display_size() -> None:
+    raw = json.dumps(
+        {
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "avg_frame_rate": "24/1",
+                    "width": 3840,
+                    "height": 2160,
+                    "side_data_list": [{"side_data_type": "Display Matrix", "rotation": 90}],
+                }
+            ],
+            "format": {"duration": "1"},
+        }
+    )
+    info = parse_ffprobe(raw)
+    assert (info.width, info.height) == (2160, 3840)
+    flat = json.loads(raw)
+    flat["streams"][0].pop("side_data_list")
+    assert (parse_ffprobe(json.dumps(flat)).width, parse_ffprobe(json.dumps(flat)).height) == (
+        3840,
+        2160,
+    )

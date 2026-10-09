@@ -5,7 +5,12 @@
            python scripts/cut.py input.mp4 --transcript words.json  (전사 재사용)
            (words.json 포맷은 worker/pipeline/transcript.py, LLM 기본 Gemini)
 
-결과: <out>.mp4 와 <out>.decisions.json (승인·제안 후보 전체). 렌더는 승인된 후보만 반영.
+결과 (<out> = <input>_edited, 렌더는 승인된 후보만 반영):
+  <out>.mp4             편집된 영상
+  <out>.decisions.json  승인·제안 후보 전체
+  <out>.csv             컷 리포트 (엑셀용)
+  <out>.srt             편집본 기준 자막 (전사가 있을 때)
+  <out>.fcpxml          --fcpxml 일 때. 원본을 참조하는 컷 타임라인 (CapCut 등 가져오기 검증용)
 """
 
 from __future__ import annotations
@@ -22,10 +27,13 @@ from worker import ffmpeg  # noqa: E402
 from worker.analyze import AnalyzeSettings, analyze  # noqa: E402
 from worker.config import load_env  # noqa: E402
 from worker.pipeline.candidates import accepted_cuts  # noqa: E402
+from worker.pipeline.fcpxml import build_fcpxml  # noqa: E402
 from worker.pipeline.intervals import complement  # noqa: E402
 from worker.pipeline.llm_cuts import CutModel  # noqa: E402
 from worker.pipeline.merge import SilenceCutSettings  # noqa: E402
+from worker.pipeline.report import ReportRow, build_csv  # noqa: E402
 from worker.pipeline.silence import seconds_to_ms  # noqa: E402
+from worker.pipeline.srt import build_cues, to_srt  # noqa: E402
 from worker.pipeline.transcript import load_words, words_to_json  # noqa: E402
 from worker.render import render  # noqa: E402
 
@@ -46,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--model", help="LLM 모델 (기본: gemini-3.8-flash / claude-opus-5-5)")
     p.add_argument("--dry-run", action="store_true", help="렌더 없이 후보만 JSON 출력")
+    p.add_argument("--fcpxml", action="store_true", help="FCPXML 타임라인도 저장 (실험적)")
     p.add_argument(
         "--encoder",
         choices=["auto", "libx264", "h264_videotoolbox"],
@@ -112,6 +121,17 @@ def main(argv: list[str] | None = None) -> int:
 
     decisions_path = out.with_suffix(".decisions.json")
     decisions_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    rows = [
+        ReportRow(c.start_ms, c.end_ms, c.kind, c.status, c.source, c.confidence, c.reason)
+        for c in a.candidates
+    ]
+    out.with_suffix(".csv").write_bytes(build_csv(rows, cuts, info.duration_ms))
+    if words:
+        srt = to_srt(build_cues(words, cuts, info.duration_ms))
+        out.with_suffix(".srt").write_text(srt, encoding="utf-8")
+    if args.fcpxml:
+        xml = build_fcpxml(args.input, info, keeps, title=out.stem)
+        out.with_suffix(".fcpxml").write_text(xml, encoding="utf-8")
 
     t1 = time.monotonic()
     edited_ms = info.duration_ms - removed

@@ -108,7 +108,12 @@ def test_analyze_then_render(api: Any, tmp_path: Path, monkeypatch: pytest.Monke
 
     assert client.get(f"/projects/{pid}").json()["status"] == "done"
     exports = {e["format"]: e["url"] for e in client.get(f"/projects/{pid}/exports").json()}
-    assert set(exports) == {"mp4", "json"}
+    assert set(exports) == {"mp4", "json", "csv", "srt"}
+    srt = httpx.get(exports["srt"]).content.decode("utf-8")
+    # "어"(추임새, 승인됨)는 자막에서 빠지고, 컷 뒤 단어는 편집본 시간으로 당겨진다
+    assert "안녕" in srt and "네" in srt and "어\n" not in srt
+    csv_text = httpx.get(exports["csv"]).content.decode("utf-8-sig")
+    assert csv_text.splitlines()[0].startswith("처리,종류") and "추임새" in csv_text
     out = tmp_path / "out.mp4"
     out.write_bytes(httpx.get(exports["mp4"]).content)
     removed = sum(

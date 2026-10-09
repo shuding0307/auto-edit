@@ -1,0 +1,17 @@
+# HTTPS 인증서는 Caddy가 자동 발급 (Let's Encrypt, 이메일 불필요). localhost 이름이면 내부 인증서.
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+# 브라우저가 presigned URL로 직접 업로드·다운로드하는 S3 주소.
+# Host 헤더를 그대로 넘겨야 서명이 맞는다 (Caddy 기본 동작).
+{$S3_DOMAIN} {
+	reverse_proxy s3:8333
+}

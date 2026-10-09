@@ -27,6 +27,8 @@ from worker.analyze import AnalyzeSettings, analyze
 from worker.pipeline.intervals import Interval, complement, merge_intervals
 from worker.pipeline.llm_cuts import CutModel
 from worker.pipeline.peaks import compute_peaks
+from worker.pipeline.report import ReportRow, build_csv
+from worker.pipeline.srt import build_cues, to_srt
 from worker.pipeline.transcript import Word
 from worker.render import render
 
@@ -192,12 +194,21 @@ def render_job(project_id: str, job_id: str) -> None:
             assert p is not None and p.duration_ms and p.fps
             source_key, ext = p.source_key, Path(p.source_key).suffix
             duration_ms, fps, has_audio = p.duration_ms, Fraction(p.fps), bool(p.has_audio)
-            rows = db.scalars(
-                select(EditDecision).where(
-                    EditDecision.project_id == p.id, EditDecision.status == "accepted"
-                )
-            ).all()
+            all_rows = db.scalars(select(EditDecision).where(EditDecision.project_id == p.id)).all()
+            rows = [d for d in all_rows if d.status == "accepted"]
             cuts = merge_intervals([Interval(d.start_ms, d.end_ms) for d in rows])
+            report_rows = [
+                ReportRow(d.start_ms, d.end_ms, d.kind, d.status, d.source, d.confidence, d.reason)
+                for d in all_rows
+            ]
+            words = [
+                Word(w.idx, w.start_ms, w.end_ms, w.text, w.confidence)
+                for w in db.scalars(
+                    select(TranscriptWord)
+                    .where(TranscriptWord.project_id == p.id)
+                    .order_by(TranscriptWord.idx)
+                )
+            ]
             decisions = [
                 {
                     "start_ms": d.start_ms,
@@ -246,8 +257,21 @@ def render_job(project_id: str, job_id: str) -> None:
         )
         storage.upload(out, f"{base}/edited.mp4", "video/mp4")
         storage.upload(decisions_path, f"{base}/edit_decisions.json", "application/json")
+        files = {"mp4": "edited.mp4", "json": "edit_decisions.json"}
+
+        report_path = tmp / "edit_report.csv"
+        report_path.write_bytes(build_csv(report_rows, cuts, duration_ms))
+        storage.upload(report_path, f"{base}/edit_report.csv", "text/csv; charset=utf-8")
+        files["csv"] = "edit_report.csv"
+
+        if words:  # 전사가 없으면(STT 미사용) 자막도 없다
+            srt_path = tmp / "captions.srt"
+            srt_path.write_text(to_srt(build_cues(words, cuts, duration_ms)), encoding="utf-8")
+            storage.upload(srt_path, f"{base}/captions.srt", "application/x-subrip; charset=utf-8")
+            files["srt"] = "captions.srt"
+
         with SessionLocal() as db:
             pid = uuid.UUID(project_id)
-            db.add(Export(project_id=pid, format="mp4", object_key=f"{base}/edited.mp4"))
-            db.add(Export(project_id=pid, format="json", object_key=f"{base}/edit_decisions.json"))
+            for fmt, name in files.items():
+                db.add(Export(project_id=pid, format=fmt, object_key=f"{base}/{name}"))
             db.commit()

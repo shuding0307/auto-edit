@@ -103,6 +103,6 @@ class Export(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), index=True
     )
-    format: Mapped[str] = mapped_column(String(10))  # mp4 / json (srt·csv는 Phase 4)
+    format: Mapped[str] = mapped_column(String(10))  # mp4 / srt / csv / json
     object_key: Mapped[str] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -30,6 +30,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(res.status, msg);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -58,6 +59,7 @@ export const api = {
     }),
   render: (id: string) => call<Project>(`/projects/${id}/render`, { method: "POST" }),
   exports: (id: string) => call<ExportFile[]>(`/projects/${id}/exports`),
+  deleteProject: (id: string) => call<void>(`/projects/${id}`, { method: "DELETE" }),
 };
 
 /** presigned URL로 S3에 직접 업로드. fetch는 업로드 진행률을 못 주므로 XHR. */
