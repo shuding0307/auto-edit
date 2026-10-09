@@ -11,7 +11,7 @@ from worker.pipeline.intervals import Interval, clip, merge_intervals
 
 @dataclass(frozen=True)
 class SilenceCutSettings:
-    padding_ms: int = 150
+    padding_ms: int = 350
     """말 앞뒤로 남겨 둘 여유. 영상 시작·끝 쪽에는 적용하지 않는다."""
     min_silence_ms: int = 700
     """이보다 짧은 무음은 자르지 않는다 (padding 적용 전 길이 기준)."""

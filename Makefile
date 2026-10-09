@@ -31,7 +31,7 @@ lint:
 	cd $(WEB) && npx tsc --noEmit && npx eslint .
 
 e2e:
-	@echo "Phase 2에서 구현: fixtures/videos 전체 처리 후 fixtures/expected와 비교" && exit 1
+	$(PY) scripts/e2e.py $(if $(LLM),--llm,)
 
 gen-types:
 	@echo "Phase 3에서 구현: OpenAPI → packages/shared TS 타입" && exit 1

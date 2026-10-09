@@ -1,0 +1,49 @@
+{
+  "video": "sample",
+  "cuts": [
+    {
+      "start_ms": 0,
+      "end_ms": 1274
+    },
+    {
+      "start_ms": 3470,
+      "end_ms": 4828
+    },
+    {
+      "start_ms": 7518,
+      "end_ms": 9659
+    },
+    {
+      "start_ms": 12148,
+      "end_ms": 15877
+    },
+    {
+      "start_ms": 19353,
+      "end_ms": 19704
+    },
+    {
+      "start_ms": 21478,
+      "end_ms": 24034
+    },
+    {
+      "start_ms": 26347,
+      "end_ms": 29072
+    },
+    {
+      "start_ms": 32860,
+      "end_ms": 36206
+    },
+    {
+      "start_ms": 41038,
+      "end_ms": 43235
+    },
+    {
+      "start_ms": 46906,
+      "end_ms": 47960
+    },
+    {
+      "start_ms": 49553,
+      "end_ms": 56307
+    }
+  ]
+}

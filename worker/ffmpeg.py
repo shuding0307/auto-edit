@@ -92,3 +92,9 @@ def run(args: list[str], on_progress: Callable[[int], None] | None = None) -> No
 def has_encoder(name: str) -> bool:
     proc = _run(["ffmpeg", "-hide_banner", "-encoders"])
     return any(line.split()[1:2] == [name] for line in proc.stdout.splitlines())
+
+
+def extract_audio(src: Path, dst: Path) -> None:
+    """STT용 16kHz 모노 FLAC. 4K 영상 대신 이걸 업로드해 전송량을 줄인다."""
+    run(["-i", str(src), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "flac", str(dst)])
+

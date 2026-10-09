@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>정답 컷 라벨링</title>
+<style>
+  :root { --bg:#fafafa; --fg:#1a1a1a; --muted:#666; --line:#ddd; --cut:#e5484d; --accent:#2563eb; --card:#fff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141414; --fg:#eee; --muted:#999; --line:#333; --card:#1d1d1d; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 -apple-system, "Apple SD Gothic Neo", sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; grid-template-columns: 1fr 320px; gap:16px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  h1 { font-size:18px; margin:0 0 8px; }
+  video { width:100%; max-height:60vh; background:#000; border-radius:6px; }
+  .bar { position:relative; height:28px; background:var(--card); border:1px solid var(--line); border-radius:4px; margin-top:8px; cursor:pointer; }
+  .bar .seg { position:absolute; top:0; bottom:0; background:var(--cut); opacity:.55; }
+  .bar .pending { position:absolute; top:0; bottom:0; background:var(--accent); opacity:.35; }
+  .bar .head { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--fg); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:8px; }
+  button, select, label.btn { font:inherit; padding:5px 10px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:4px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  input[type=file] { display:none; }
+  .time { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
+  aside { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:12px; max-height:85vh; overflow:auto; }
+  ol { padding-left:20px; margin:8px 0; }
+  li { padding:3px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:6px; }
+  li span { cursor:pointer; }
+  li button { padding:0 6px; }
+  .keys { color:var(--muted); font-size:12px; }
+  kbd { border:1px solid var(--line); border-radius:3px; padding:0 4px; font-size:11px; }
+  .status { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>정답 컷 라벨링</h1>
+    <div class="row">
+      <label class="btn primary">영상 열기<input id="videoFile" type="file" accept="video/*"></label>
+      <label class="btn">기존 JSON 불러오기<input id="jsonFile" type="file" accept=".json,application/json"></label>
+      <select id="rate" title="재생 속도">
+        <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+        <option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+      </select>
+      <span id="status" class="status">영상을 열어 주세요</span>
+    </div>
+    <video id="v" controls></video>
+    <div id="bar" class="bar"></div>
+    <div class="row">
+      <span class="time" id="now">0:00.000</span>
+      <button id="btnIn">시작 <kbd>I</kbd></button>
+      <button id="btnOut">끝 <kbd>O</kbd></button>
+      <span class="time" id="pending"></span>
+    </div>
+    <p class="keys">
+      <kbd>Space</kbd> 재생/정지 · <kbd>←</kbd><kbd>→</kbd> 0.1초 · <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> 1초 ·
+      <kbd>,</kbd><kbd>.</kbd> 1프레임(30fps 기준) · <kbd>I</kbd> 지울 구간 시작 · <kbd>O</kbd> 끝(구간 추가) · <kbd>Esc</kbd> 시작 취소 ·
+      <kbd>Backspace</kbd> 마지막 구간 삭제<br>
+      기준: 무음·말실수·반복처럼 <b>최종 영상에서 빠져야 할 부분</b>만 표시. 표시하지 않은 곳은 전부 "지우면 안 되는 구간"으로 평가됩니다.
+      작업은 브라우저에 자동 저장됩니다.
+    </p>
+  </section>
+  <aside>
+    <div class="row" style="margin-top:0;justify-content:space-between">
+      <b>지울 구간 <span id="count">0</span>개</b>
+      <button id="save" class="primary">JSON 저장</button>
+    </div>
+    <ol id="list"></ol>
+    <p class="keys">저장된 파일을 <code>fixtures/expected/&lt;영상이름&gt;.json</code>에 두세요.</p>
+  </aside>
+</main>
+<script>
+const v = document.getElementById("v"), bar = document.getElementById("bar"), list = document.getElementById("list");
+let name = null, cuts = [], pendingIn = null;
+
+const fmt = ms => { ms = Math.max(0, Math.round(ms)); const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000);
+  return `${m}:${String(s).padStart(2, "0")}.${String(ms % 1000).padStart(3, "0")}`; };
+const nowMs = () => Math.round(v.currentTime * 1000);
+const key = () => `label:${name}`;
+function persist() { try { if (name) localStorage.setItem(key(), JSON.stringify(cuts)); } catch {} }
+function restore() { try { const s = localStorage.getItem(key()); if (s) cuts = JSON.parse(s); } catch {} }
+
+function normalize() {
+  cuts.sort((a, b) => a.start_ms - b.start_ms);
+  const out = [];
+  for (const c of cuts) {
+    const last = out[out.length - 1];
+    if (last && c.start_ms <= last.end_ms) last.end_ms = Math.max(last.end_ms, c.end_ms);
+    else out.push({ start_ms: c.start_ms, end_ms: c.end_ms });
+  }
+  cuts = out;
+}
+
+function render() {
+  document.getElementById("count").textContent = cuts.length;
+  list.innerHTML = "";
+  cuts.forEach((c, i) => {
+    const li = document.createElement("li");
+    const span = document.createElement("span");
+    span.className = "time";
+    span.textContent = `${fmt(c.start_ms)} → ${fmt(c.end_ms)} (${((c.end_ms - c.start_ms) / 1000).toFixed(2)}s)`;
+    span.onclick = () => { v.currentTime = Math.max(0, c.start_ms / 1000 - 1); v.play(); };
+    const del = document.createElement("button");
+    del.textContent = "×"; del.title = "삭제";
+    del.onclick = () => { cuts.splice(i, 1); persist(); render(); };
+    li.append(span, del); list.append(li);
+  });
+  drawBar();
+}
+
+function drawBar() {
+  const d = v.duration * 1000;
+  bar.innerHTML = "";
+  if (!d) return;
+  for (const c of cuts) {
+    const el = document.createElement("div"); el.className = "seg";
+    el.style.left = `${c.start_ms / d * 100}%`; el.style.width = `${(c.end_ms - c.start_ms) / d * 100}%`;
+    bar.append(el);
+  }
+  if (pendingIn !== null) {
+    const el = document.createElement("div"); el.className = "pending";
+    const a = Math.min(pendingIn, nowMs()), b = Math.max(pendingIn, nowMs());
+    el.style.left = `${a / d * 100}%`; el.style.width = `${(b - a) / d * 100}%`;
+    bar.append(el);
+  }
+  const head = document.createElement("div"); head.className = "head";
+  head.style.left = `${nowMs() / d * 100}%`; bar.append(head);
+}
+
+function markIn() { pendingIn = nowMs(); updatePending(); drawBar(); }
+function markOut() {
+  if (pendingIn === null) return;
+  const a = Math.min(pendingIn, nowMs()), b = Math.max(pendingIn, nowMs());
+  if (b > a) { cuts.push({ start_ms: a, end_ms: b }); normalize(); persist(); }
+  pendingIn = null; updatePending(); render();
+}
+function updatePending() {
+  document.getElementById("pending").textContent = pendingIn === null ? "" : `시작 ${fmt(pendingIn)} — O로 끝 표시`;
+}
+
+document.getElementById("videoFile").onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (/_edited/i.test(f.name) && !confirm(
+    `"${f.name}"은 이미 컷 편집된 결과 영상으로 보입니다.\n정답은 원본 영상 위에 표시해야 시간이 맞습니다. 그래도 열까요?`)) {
+    e.target.value = ""; return;
+  }
+  name = f.name.replace(/\.[^.]+$/, "");
+  v.src = URL.createObjectURL(f);
+  cuts = []; pendingIn = null; restore(); normalize(); render();
+  document.getElementById("status").textContent = `${f.name}${cuts.length ? " · 저장된 작업 복원됨" : ""}`;
+};
+document.getElementById("jsonFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    // 정답 포맷 {"cuts": [...]} 또는 cut.py의 .decisions.json {"decisions": [...]} 모두 받는다
+    const rows = data.cuts || (data.decisions || []).filter(d => d.status !== "rejected");
+    cuts = rows.map(c => ({ start_ms: +c.start_ms, end_ms: +c.end_ms })).filter(c => c.end_ms > c.start_ms);
+    normalize(); persist(); render();
+    document.getElementById("status").textContent = `${f.name}에서 ${cuts.length}개 불러옴`;
+  } catch (err) { alert("JSON을 읽을 수 없습니다: " + err.message); }
+};
+document.getElementById("save").onclick = () => {
+  const body = JSON.stringify({ video: name, cuts }, null, 2);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([body], { type: "application/json" }));
+  a.download = `${name || "expected"}.json`; a.click();
+};
+document.getElementById("rate").onchange = e => { v.playbackRate = +e.target.value; };
+document.getElementById("btnIn").onclick = markIn;
+document.getElementById("btnOut").onclick = markOut;
+bar.onclick = e => { if (v.duration) v.currentTime = (e.offsetX / bar.clientWidth) * v.duration; };
+v.addEventListener("timeupdate", () => { document.getElementById("now").textContent = fmt(nowMs()); drawBar(); });
+v.addEventListener("loadedmetadata", drawBar);
+
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT" || !v.src) return;
+  const step = e.shiftKey ? 1 : 0.1;
+  switch (e.key) {
+    case " ": e.preventDefault(); v.paused ? v.play() : v.pause(); break;
+    case "ArrowLeft": e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - step); break;
+    case "ArrowRight": e.preventDefault(); v.currentTime += step; break;
+    case ",": v.pause(); v.currentTime = Math.max(0, v.currentTime - 1 / 30); break;
+    case ".": v.pause(); v.currentTime += 1 / 30; break;
+    case "i": case "I": markIn(); break;
+    case "o": case "O": markOut(); break;
+    case "Escape": pendingIn = null; updatePending(); drawBar(); break;
+    case "Backspace": e.preventDefault(); cuts.pop(); persist(); render(); break;
+  }
+});
+</script>
+</body>
+</html>

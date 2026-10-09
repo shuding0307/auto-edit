@@ -13,3 +13,6 @@ fixtures/videos/*
 !fixtures/videos/.gitkeep
 *_edited.mp4
 .DS_Store
+
+# 개인 음성 전사 (영상과 같은 이유로 커밋하지 않음)
+fixtures/transcripts/*.json
