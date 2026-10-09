@@ -15,9 +15,16 @@ extend-exclude = ["apps/web"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+"apps/api/migrations/env.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["app", "worker"]
 
 [tool.mypy]
 files = ["worker", "apps/api/app", "scripts"]
 strict = true
+
+[[tool.mypy.overrides]]
+module = ["boto3", "boto3.*", "botocore.*"]
+ignore_missing_imports = true

@@ -3,9 +3,15 @@
 업로드 → 무음·말실수 자동 컷 → 사람 검토 → MP4·SRT·JSON 내보내기.
 개발 계획: https://claude.ai/artifact/CmYuKZUivRMYb5Ywn6H4XM
 
+## 실행 (터미널 4개)
+- make dev      # docker compose: postgres :5434, redis :6379, s3(SeaweedFS) :8333
+- make migrate  # DB 스키마 (최초·모델 변경 후)
+- make api      # FastAPI :8000
+- make worker   # RQ 워커 (분석·렌더)
+- make web      # Next.js :3000 → http://localhost:3000
+
 ## 명령어
 - make setup    # .venv 생성 + Python/Node 의존성 설치 (최초 1회)
-- make dev      # docker compose up (postgres, redis, s3=SeaweedFS :8333)
 - make test     # pytest worker/ apps/api + vitest apps/web
 - make lint     # ruff, mypy, eslint, tsc
 - make e2e      # fixtures 전체 분석 → 정답 비교 표 → EVAL_LOG.md (LLM 포함: make e2e LLM=1, 비용 발생)
@@ -16,7 +22,11 @@
 ## 구조
 - worker/pipeline/  순수 함수: silence(파서), merge, timemap, probe, transcript, llm_cuts,
                     candidates(무음+LLM → 후보·자동승인), evaluate(정답 비교)
-- worker/analyze.py 분석 조립 (CLI·e2e 공용)
+- worker/analyze.py 분석 조립 (CLI·e2e·워커 공용)
+- worker/jobs.py    RQ job: analyze_job(프록시·파형·STT·후보 저장), render_job(렌더·내보내기)
+- apps/api/app      main.py(라우트) models.py(SQLAlchemy) storage.py(S3) queue.py(RQ) / migrations(Alembic)
+- apps/web          app/page.tsx(업로드) app/projects/[id](진행률·검토) components/Review·Timeline, lib/cuts.ts
+- packages/shared/api.ts  make gen-types 로 생성 (직접 수정 금지)
 - worker/gemini.py  Gemini 호출은 여기서만: STT(gemini-3.5-transcribe) + CutModel(gemini-3.8-flash, 기본)
 - worker/llm_client.py  Claude 호출은 여기서만 (CutModel 구현). 테스트는 가짜 클라이언트
 - worker/ffmpeg.py  FFmpeg/ffprobe 호출은 전부 여기
@@ -35,6 +45,11 @@
 - 영상 길이는 최대 10분·500MB를 가정한다 (긴 영상 분할 설계는 범위 밖).
 
 ## 함정
+- 호스트 5432는 Homebrew Postgres, 5433은 다른 프로젝트 컨테이너가 사용 → 이 프로젝트 DB는 5434.
+- 워커는 macOS에서 SimpleWorker(fork 없음)로 실행. 코드를 바꾸면 워커를 재시작해야 반영된다.
+- 테스트는 실제 Postgres(cut_test DB)·S3(cut-editor-test 버킷)를 쓴다. make dev 없으면 통합 테스트 skip.
+- 검토 화면 시간 계산은 lib/cuts.ts — 서버 pipeline/intervals.py와 규칙을 맞출 것.
+- 브라우저 → S3 직접 업로드는 버킷 CORS 필요. API 시작 시 storage.ensure_bucket()이 설정한다.
 - 자동 승인은 무음 + confidence ≥ 0.9 반복만. 나머지 LLM 후보는 suggested (렌더 미반영).
 - STT 기본은 Gemini 무료(gemini-3.5-transcribe). 단어 타임스탬프는 실험적 기능이고 정확도가 떨어질 수 있어
   비교 대상이 필요하다. 다른 STT도 transcript.load_words 포맷으로 변환해 넘기면 된다.
@@ -42,6 +57,7 @@
 - MinIO 공식 이미지는 pull 불가(배포 중단). 로컬 S3는 SeaweedFS, 키는 infra/seaweedfs/s3.json.
   boto3는 Config(signature_version="s3v4", s3={"addressing_style": "path"}) 필수
   (기본값이면 presigned PUT이 403). 컨테이너 시작 후 S3 API가 뜨기까지 몇 초 걸린다.
+  8MB 넘는 파일의 boto3 병렬 다운로드는 ETag 오류 → storage.py는 단일 스트림 전송.
 - iPhone 영상은 avg_frame_rate가 678240/28261 같은 흔들린 값. probe.py가 공칭 fps로 보정한다.
 - 4K 렌더는 느리다. macOS에선 h264_videotoolbox(기본 auto), 결과는 임시 파일에 쓴 뒤 이름 변경.
 - 컷 경계는 프레임 경계로 스냅한다. 스냅 안 하면 세그먼트마다 비디오가 프레임 단위로

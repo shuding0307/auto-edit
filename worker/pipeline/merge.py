@@ -15,6 +15,8 @@ class SilenceCutSettings:
     """말 앞뒤로 남겨 둘 여유. 영상 시작·끝 쪽에는 적용하지 않는다."""
     min_silence_ms: int = 700
     """이보다 짧은 무음은 자르지 않는다 (padding 적용 전 길이 기준)."""
+    min_cut_ms: int = 200
+    """padding 후 남은 컷이 이보다 짧으면 버린다. 수십 ms 컷은 튀는 느낌만 준다."""
 
 
 def silence_to_cuts(
@@ -42,5 +44,6 @@ def silence_to_cuts(
         # 영상 시작·끝에 붙은 쪽은 스냅하지 않는다 (끝에 1프레임 미만 조각이 남지 않게)
         cut_start = 0 if start == 0 else snapped[0]
         cut_end = duration_ms if end == duration_ms else snapped[1]
-        cuts.append(Interval(cut_start, cut_end))
+        if cut_end - cut_start >= settings.min_cut_ms:
+            cuts.append(Interval(cut_start, cut_end))
     return merge_intervals(cuts)

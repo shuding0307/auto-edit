@@ -30,6 +30,13 @@ def test_snap_is_inward() -> None:
     assert cuts([Interval(2010, 3010)]) == [Interval(2133, 2900)]
 
 
+def test_tiny_cut_after_padding_is_dropped() -> None:
+    # 무음 700ms - padding 100×2 = 500ms는 남지만, min_cut_ms=600이면 버린다
+    s = SilenceCutSettings(padding_ms=100, min_silence_ms=500, min_cut_ms=600)
+    assert cuts([Interval(2000, 2700)], settings=s) == []
+    assert cuts([Interval(2000, 2900)], settings=s) == [Interval(2100, 2800)]
+
+
 def test_short_silence_is_ignored() -> None:
     assert cuts([Interval(2000, 2499)]) == []
 

@@ -98,3 +98,61 @@ def extract_audio(src: Path, dst: Path) -> None:
     """STT용 16kHz 모노 FLAC. 4K 영상 대신 이걸 업로드해 전송량을 줄인다."""
     run(["-i", str(src), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "flac", str(dst)])
 
+
+def make_proxy(src: Path, dst: Path, *, encoder: str) -> None:
+    """검토 화면용 720p H.264. 4K HEVC는 브라우저에서 무겁거나 재생되지 않을 수 있다."""
+    vcodec = (
+        ["-c:v", "h264_videotoolbox", "-b:v", "3M", "-allow_sw", "1"]
+        if encoder == "h264_videotoolbox"
+        else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "26"]
+    )
+    run(
+        [
+            "-i",
+            str(src),
+            # 영상·음성만 (iPhone 메타데이터 트랙 제외)
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            # 짧은 변을 720으로: 가로 1280x720, 세로 720x1280
+            "-vf",
+            "scale='if(gt(iw,ih),-2,720)':'if(gt(iw,ih),720,-2)'",
+            *vcodec,
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            str(dst),
+        ]
+    )
+
+
+def pcm_mono(src: Path, *, sample_rate: int) -> bytes:
+    """파형용 모노 s16le PCM."""
+    proc = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostats",
+            "-i",
+            str(src),
+            "-vn",
+            "-ac",
+            "1",
+            "-ar",
+            str(sample_rate),
+            "-f",
+            "s16le",
+            "-",
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise FFmpegError(proc.stderr.decode(errors="replace").strip().splitlines()[-1])
+    return proc.stdout

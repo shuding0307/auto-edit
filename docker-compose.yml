@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cut}
       POSTGRES_DB: ${POSTGRES_DB:-cut}
     ports:
-      - "5432:5432"
+      - "5434:5432"  # 호스트 5432·5433은 다른 Postgres가 사용 중
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
