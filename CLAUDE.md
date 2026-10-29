@@ -49,8 +49,9 @@
 - 영상 길이는 최대 10분·500MB를 가정한다 (긴 영상 분할 설계는 범위 밖).
 
 ## 함정
-- 운영(리눅스)에는 VideoToolbox가 없어 libx264 CPU 렌더: 59초 4K가 약 3.5분, 결과 396MB.
-  맥에서는 70초. 운영 렌더 속도·용량 조정은 아직 미정 (해상도·preset·crf).
+- 결과 영상은 짧은 변 1080으로 축소 (render.DEFAULT_SHORT_SIDE, CLI --original-size로 해제).
+  운영(리눅스, libx264 superfast·crf20): 59초 4K 원본 → 41초 결과에 107초·98MB.
+  남은 병목은 4K HEVC 디코딩이라 5분짜리 4K는 약 9분 걸린다 (계획 목표 2분과 차이 있음).
 - 맥의 80번은 내장 Apache가 사용. 운영 구성을 로컬에서 시험할 땐 HTTP_PORT/HTTPS_PORT로 바꾼다.
 - presigned URL은 서명에 호스트가 들어가므로 S3_PUBLIC_ENDPOINT(브라우저 주소)로 만든다.
 - 호스트 5432는 Homebrew Postgres, 5433은 다른 프로젝트 컨테이너가 사용 → 이 프로젝트 DB는 5434.

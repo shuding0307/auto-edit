@@ -1,0 +1,21 @@
+{
+  "video": "zz_labeltest",
+  "cuts": [
+    {
+      "start_ms": 0,
+      "end_ms": 734
+    },
+    {
+      "start_ms": 2977,
+      "end_ms": 4377
+    },
+    {
+      "start_ms": 6060,
+      "end_ms": 6411
+    },
+    {
+      "start_ms": 9885,
+      "end_ms": 12000
+    }
+  ]
+}

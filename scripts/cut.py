@@ -35,7 +35,7 @@ from worker.pipeline.report import ReportRow, build_csv  # noqa: E402
 from worker.pipeline.silence import seconds_to_ms  # noqa: E402
 from worker.pipeline.srt import build_cues, to_srt  # noqa: E402
 from worker.pipeline.transcript import load_words, words_to_json  # noqa: E402
-from worker.render import render  # noqa: E402
+from worker.render import DEFAULT_SHORT_SIDE, render  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,6 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--model", help="LLM 모델 (기본: gemini-3.8-flash / claude-opus-5-5)")
     p.add_argument("--dry-run", action="store_true", help="렌더 없이 후보만 JSON 출력")
     p.add_argument("--fcpxml", action="store_true", help="FCPXML 타임라인도 저장 (실험적)")
+    p.add_argument(
+        "--original-size", action="store_true", help="원본 해상도로 렌더 (기본: 짧은 변 1080)"
+    )
     p.add_argument(
         "--encoder",
         choices=["auto", "libx264", "h264_videotoolbox"],
@@ -154,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         fps=info.fps,
         has_audio=info.has_audio,
         encoder=args.encoder,
+        max_short_side=None if args.original_size else DEFAULT_SHORT_SIDE,
         on_progress=progress,
     )
     print(file=sys.stderr)

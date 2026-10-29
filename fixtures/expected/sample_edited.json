@@ -1,0 +1,17 @@
+{
+  "video": "sample_edited",
+  "cuts": [
+    {
+      "start_ms": 100,
+      "end_ms": 800
+    },
+    {
+      "start_ms": 11545,
+      "end_ms": 11719
+    },
+    {
+      "start_ms": 29658,
+      "end_ms": 34085
+    }
+  ]
+}

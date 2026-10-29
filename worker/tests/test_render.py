@@ -24,12 +24,19 @@ def test_filtergraph_two_segments() -> None:
     # 마지막 구간은 영상 끝이라 fade-out 없음
     last_audio = graph.split(";")[3]
     assert "afade=t=in:st=0:d=0.010" in last_audio and "t=out" not in last_audio
-    assert graph.endswith("[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]")
+    assert "[v0][a0][v1][a1]concat=n=2:v=1:a=1[cv][outa]" in graph
+    # 기본은 짧은 변 1080으로 축소 (원본이 작으면 그대로)
+    assert graph.endswith(
+        "[cv]scale='if(gt(iw,ih),-2,min(1080,iw))':'if(gt(iw,ih),min(1080,ih),-2)'[outv]"
+    )
     assert maps == ["-map", "[outv]", "-map", "[outa]"]
 
 
 def test_filtergraph_without_audio() -> None:
-    graph, maps = build_filtergraph([Interval(0, 1000)], duration_ms=1000, has_audio=False)
+    graph, maps = build_filtergraph(
+        [Interval(0, 1000)], duration_ms=1000, has_audio=False, max_short_side=None
+    )
+    # 원본 해상도 유지: 축소 필터 없이 concat이 바로 출력
     assert "[0:a]" not in graph and graph.endswith("[v0]concat=n=1:v=1:a=0[outv]")
     assert maps == ["-map", "[outv]"]
 
@@ -109,3 +116,40 @@ def _stream_durations_ms(path: Path) -> tuple[float, float]:
     v = next(s for s in streams if s["codec_type"] == "video")
     a = next(s for s in streams if s["codec_type"] == "audio")
     return float(v["duration"]) * 1000, float(a["duration"]) * 1000
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [("1440x2560", (1080, 1920)), ("2560x1440", (1920, 1080)), ("640x360", (640, 360))],
+)
+def test_output_short_side_capped_at_1080(
+    tmp_path: Path, size: str, expected: tuple[int, int]
+) -> None:
+    src = tmp_path / "in.mp4"
+    ffmpeg.run(
+        [
+            "-f",
+            "lavfi",
+            "-i",
+            f"testsrc=size={size}:rate=30:duration=1",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(src),
+        ]
+    )
+    dst = tmp_path / "out.mp4"
+    render(src, dst, [Interval(0, 1000)], duration_ms=1000, fps=Fraction(30), has_audio=False)
+    import json
+    import subprocess
+
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-print_format", "json", "-show_streams", str(dst)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    v = json.loads(out)["streams"][0]
+    assert (v["width"], v["height"]) == expected
